@@ -1,0 +1,22 @@
+R_DEF: Internal format may change without notice
+local
+drawable launch_background
+drawable rounded_bg
+drawable rounded_bg_1
+drawable rounded_bg_2
+drawable rounded_bg_3
+drawable rounded_bg_4
+drawable widget_background
+id lesson_container
+id lesson_room
+id lesson_subject
+id lesson_time
+id lessons_list
+id next_lesson_timer
+layout example_widget_layout
+layout lesson_item
+layout loading_view
+mipmap ic_launcher
+style LaunchTheme
+style NormalTheme
+xml appwidgetprovider

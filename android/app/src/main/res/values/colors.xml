@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Другие цвета вашего приложения -->
+
+    <!-- Добавьте colorAccent -->
+    <color name="colorAccent">#FF4081</color> <!-- Вы можете выбрать любой другой цвет -->
+</resources>
