@@ -1,3 +1,5 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:home/pages/home_page.dart';
 import 'package:home/pages/profile_page.dart';
@@ -9,12 +11,22 @@ import 'firebase_options.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'; // Импорт локализаций
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Инициализация данных локали для 'ru_RU'
+  await initializeDateFormatting('ru_RU', null);
+  Intl.defaultLocale = 'ru_RU';
+
+  // Инициализация Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
   runApp(MyApp());
 }
 
@@ -32,6 +44,16 @@ class MyApp extends StatelessWidget {
       ),
       themeMode: ThemeMode.system,
       home: AuthGate(),
+      supportedLocales: [
+        const Locale('ru', 'RU'),
+        // Добавьте другие локали по мере необходимости
+      ],
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        // Добавьте другие делегаты по мере необходимости
+      ],
     );
   }
 }
@@ -72,11 +94,11 @@ class _MainPageState extends State<MainPage> {
   ];
 
   final List<String> _titles = [
-    'Home',
-    'Profile',
-    'News',
-    'College',
-    'Admin Panel',
+    'Главная',
+    'Профиль',
+    'Новости',
+    'Колледж',
+    'Админ Панель',
   ];
 
   void _onItemTapped(int index) {
@@ -85,12 +107,30 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
+  Future<void> _logout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      // После выхода из системы вы будете перенаправлены на страницу входа благодаря StreamBuilder в AuthGate
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при выходе: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_selectedIndex]),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            tooltip: 'Выход',
+            onPressed: _logout,
+          ),
+        ],
       ),
       body: IndexedStack(
         index: _selectedIndex,
@@ -101,11 +141,11 @@ class _MainPageState extends State<MainPage> {
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(icon: Icon(Icons.article), label: 'News'),
-          BottomNavigationBarItem(icon: Icon(Icons.school), label: 'College'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Admin'),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главная'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+          BottomNavigationBarItem(icon: Icon(Icons.article), label: 'Новости'),
+          BottomNavigationBarItem(icon: Icon(Icons.school), label: 'Колледж'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Админ'),
         ],
       ),
     );
