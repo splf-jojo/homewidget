@@ -16,16 +16,16 @@ class AdminPanel extends StatelessWidget {
     return DefaultTabController(
       length: 4, // Увеличиваем количество вкладок до 4
       child: Scaffold(
-        appBar: AppBar(
-          title: Text('Админ Панель'),
-          bottom: TabBar(
+        appBar: TabBar(
+
+
             tabs: [
               Tab(text: 'Расписания'),
               Tab(text: 'Пользователи'),
               Tab(text: 'Группы'),
               Tab(text: 'Предметы'), // Новая вкладка для предметов
             ],
-          ),
+
         ),
         body: TabBarView(
           children: [

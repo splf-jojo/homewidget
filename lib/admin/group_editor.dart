@@ -28,13 +28,22 @@ class _GroupEditorState extends State<GroupEditor> {
   Future<void> _loadGroup() async {
     try {
       final doc = await FirebaseFirestore.instance.collection('groups').doc(widget.groupId).get();
-      final data = doc.data() as Map<String, dynamic>;
-      setState(() {
-        _groupName = data['name'] ?? '';
-        _course = data['course'] ?? 1;
-        _students = List<String>.from(data['students'] ?? []);
-        _isLoading = false;
-      });
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data != null) {
+        setState(() {
+          _groupName = data['name'] ?? '';
+          _course = data['course'] ?? 1;
+          _students = List<String>.from(data['students'] ?? []);
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Данные группы не найдены.')),
+        );
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -101,6 +110,7 @@ class _GroupEditorState extends State<GroupEditor> {
           key: _formKey,
           child: Column(
             children: [
+              // Поле для ввода названия группы
               TextFormField(
                 initialValue: _groupName,
                 decoration: InputDecoration(labelText: 'Название группы'),
@@ -114,6 +124,7 @@ class _GroupEditorState extends State<GroupEditor> {
                   _groupName = value!.trim();
                 },
               ),
+              // Поле для ввода курса
               TextFormField(
                 initialValue: _course.toString(),
                 decoration: InputDecoration(labelText: 'Курс'),
@@ -132,6 +143,7 @@ class _GroupEditorState extends State<GroupEditor> {
                 },
               ),
               SizedBox(height: 20),
+              // Кнопка для добавления студента
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -143,6 +155,7 @@ class _GroupEditorState extends State<GroupEditor> {
                   ),
                 ],
               ),
+              // Список выбранных студентов
               Expanded(
                 child: ListView.builder(
                   itemCount: _students.length,
@@ -167,6 +180,7 @@ class _GroupEditorState extends State<GroupEditor> {
                 ),
               ),
               SizedBox(height: 20),
+              // Кнопка для сохранения изменений
               ElevatedButton(
                 onPressed: _saveGroup,
                 child: Text('Сохранить Изменения'),
@@ -194,10 +208,14 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       content: Container(
         width: double.maxFinite,
         child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Student').snapshots(),
+          stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'student').snapshots(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) return CircularProgressIndicator();
+            if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
             final students = snapshot.data!.docs;
+
+            if (students.isEmpty) {
+              return Text('Студенты не найдены.');
+            }
 
             return DropdownButtonFormField<String>(
               items: students.map((doc) {
