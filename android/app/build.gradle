@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.home"
-        minSdkVersion 21 // Минимальная версия SDK
+        minSdkVersion 23 // Минимальная версия SDK
         targetSdkVersion 35
         versionCode 1
         versionName "1.0"
@@ -43,6 +43,8 @@ dependencies {
     implementation 'com.google.firebase:firebase-analytics:21.2.0'
     implementation 'com.google.firebase:firebase-firestore:24.4.3'
     // Добавьте другие зависимости по необходимости
+    implementation 'com.google.firebase:firebase-auth'
+    implementation platform('com.google.firebase:firebase-bom:32.1.1')
 }
 
 flutter {

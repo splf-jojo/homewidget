@@ -1,19 +1,20 @@
-// lib/main.dart
-
 import 'package:flutter/material.dart';
 import 'package:home/pages/home_page.dart';
 import 'package:home/pages/profile_page.dart';
 import 'package:home/pages/news_page.dart';
 import 'package:home/pages/college_page.dart';
+import 'package:home/admin/admin_panel.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'pages/login_page.dart';
+import 'pages/register_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  print("Firebase initialized"); // Добавьте для отладки
   runApp(MyApp());
 }
 
@@ -25,20 +26,32 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
         brightness: Brightness.light,
-        bottomNavigationBarTheme: BottomNavigationBarThemeData(
-          selectedItemColor: Colors.blueAccent,
-          unselectedItemColor: Colors.grey,
-        ),
       ),
       darkTheme: ThemeData(
         brightness: Brightness.dark,
-        bottomNavigationBarTheme: BottomNavigationBarThemeData(
-          selectedItemColor: Colors.tealAccent,
-          unselectedItemColor: Colors.grey,
-        ),
       ),
       themeMode: ThemeMode.system,
-      home: MainPage(),
+      home: AuthGate(),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (!snapshot.hasData) {
+          return LoginPage();
+        }
+        return MainPage();
+      },
     );
   }
 }
@@ -50,12 +63,20 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   int _selectedIndex = 0;
-
   final List<Widget> _pages = [
     HomePage(),
     ProfilePage(),
     NewsPage(),
     CollegePage(),
+    AdminPanel(),
+  ];
+
+  final List<String> _titles = [
+    'Home',
+    'Profile',
+    'News',
+    'College',
+    'Admin Panel',
   ];
 
   void _onItemTapped(int index) {
@@ -68,24 +89,23 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Home Widget App'),
+        title: Text(_titles[_selectedIndex]),
+        centerTitle: true,
       ),
-      body: _pages[_selectedIndex],
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
+      ),
       bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed, // Чтобы все иконки отображались
+        type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        selectedItemColor: Theme.of(context).brightness == Brightness.dark
-            ? Colors.tealAccent
-            : Colors.blueAccent,
-        unselectedItemColor: Theme.of(context).brightness == Brightness.dark
-            ? Colors.grey[400]
-            : Colors.grey[700],
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           BottomNavigationBarItem(icon: Icon(Icons.article), label: 'News'),
           BottomNavigationBarItem(icon: Icon(Icons.school), label: 'College'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Admin'),
         ],
       ),
     );
