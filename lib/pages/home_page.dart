@@ -98,6 +98,7 @@ class _HomePageState extends State<HomePage> {
         setState(() {
           errorMessage = 'Неизвестная роль пользователя.';
           isLoading = false;
+          isLoading = false;
         });
         return;
       }
@@ -221,7 +222,9 @@ class _HomePageState extends State<HomePage> {
     final lessonStrings = todaySchedule.lessons.map((lesson) {
       String subjectName = subjectMap[lesson.subjectId] ?? 'Без названия';
       String teacherName = teacherMap[lesson.teacherId] ?? 'Неизвестный учитель';
-      return "${lesson.startTime}-${lesson.endTime} $subjectName ($teacherName) в аудитории ${lesson.room}";
+      return "${lesson.startTime}-${lesson.endTime} $subjectName($teacherName) ${lesson.room}";
+
+      // return "${lesson.startTime}-${lesson.endTime} $subjectName ($teacherName)  аудитории ${lesson.room}в";
     }).join(";\n");
 
     await HomeWidget.saveWidgetData<String>('widgetText', lessonStrings);
@@ -234,10 +237,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Главная страница'),
-        centerTitle: true,
-      ),
+
       body: _buildBody(),
     );
   }

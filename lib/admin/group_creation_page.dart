@@ -70,6 +70,7 @@ class _GroupCreationPageState extends State<GroupCreationPage> {
           key: _formKey,
           child: Column(
             children: [
+              // Поле для ввода названия группы
               TextFormField(
                 decoration: InputDecoration(labelText: 'Название группы'),
                 validator: (value) {
@@ -82,6 +83,7 @@ class _GroupCreationPageState extends State<GroupCreationPage> {
                   _groupName = value!.trim();
                 },
               ),
+              // Поле для ввода курса
               TextFormField(
                 decoration: InputDecoration(labelText: 'Курс'),
                 keyboardType: TextInputType.number,
@@ -100,6 +102,7 @@ class _GroupCreationPageState extends State<GroupCreationPage> {
                 },
               ),
               SizedBox(height: 20),
+              // Кнопка для добавления студента
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -111,6 +114,7 @@ class _GroupCreationPageState extends State<GroupCreationPage> {
                   ),
                 ],
               ),
+              // Список выбранных студентов
               Expanded(
                 child: ListView.builder(
                   itemCount: _students.length,
@@ -135,6 +139,7 @@ class _GroupCreationPageState extends State<GroupCreationPage> {
                 ),
               ),
               SizedBox(height: 20),
+              // Кнопка для создания группы
               ElevatedButton(
                 onPressed: _createGroup,
                 child: Text('Создать Группу'),
@@ -162,10 +167,14 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       content: Container(
         width: double.maxFinite,
         child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'Student').snapshots(),
+          stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'student').snapshots(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) return CircularProgressIndicator();
+            if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
             final students = snapshot.data!.docs;
+
+            if (students.isEmpty) {
+              return Text('Студенты не найдены.');
+            }
 
             return DropdownButtonFormField<String>(
               items: students.map((doc) {
