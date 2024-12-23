@@ -15,6 +15,7 @@ class _LoginPageState extends State<LoginPage> {
   String _email = '';
   String _password = '';
   bool _isLoading = false;
+  bool _isPasswordVisible = false; // Добавлено для управления видимостью пароля
 
   Future<void> _login() async {
     final isValid = _formKey.currentState?.validate();
@@ -55,7 +56,6 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDarkMode ? Colors.white : Colors.black;
 
     return Scaffold(
       appBar: AppBar(
@@ -87,8 +87,22 @@ class _LoginPageState extends State<LoginPage> {
                   },
                 ),
                 TextFormField(
-                  decoration: InputDecoration(labelText: 'Пароль'),
-                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: 'Пароль',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordVisible = !_isPasswordVisible;
+                        });
+                      },
+                    ),
+                  ),
+                  obscureText: !_isPasswordVisible,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Пожалуйста, введите пароль';
@@ -108,7 +122,8 @@ class _LoginPageState extends State<LoginPage> {
                 TextButton(
                   onPressed: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => RegisterPage()),
+                      MaterialPageRoute(
+                          builder: (context) => RegisterPage()),
                     );
                   },
                   child: Text('Нет аккаунта? Зарегистрироваться'),
