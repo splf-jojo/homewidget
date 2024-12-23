@@ -14,8 +14,10 @@ class AdminPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
+
       length: 4, // Увеличиваем количество вкладок до 4
       child: Scaffold(
+
         appBar: TabBar(
 
 
@@ -27,6 +29,7 @@ class AdminPanel extends StatelessWidget {
             ],
 
         ),
+        
         body: TabBarView(
           children: [
             ScheduleList(),

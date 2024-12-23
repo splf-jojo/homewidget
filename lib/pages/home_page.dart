@@ -1,14 +1,17 @@
 // lib/pages/home_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:home_widget/home_widget.dart';
-import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../models/schedule.dart'; // Обновите путь согласно вашей структуре
-import './profile_page.dart';
+import 'package:intl/intl.dart';
+import 'package:home/models/schedule.dart';
+import 'package:home/models/subject.dart';
+import 'package:home_widget/home_widget.dart'; // Добавленный импорт
 
 class HomePage extends StatefulWidget {
+  final String groupId; // Переданный groupId
+
+  HomePage({required this.groupId});
+
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -17,187 +20,111 @@ class _HomePageState extends State<HomePage> {
   Schedule? schedule;
   bool isLoading = true;
   String errorMessage = '';
+  String selectedDay = 'Понедельник'; // По умолчанию первый день
 
   // Карты для соответствий
-  Map<String, String> subjectMap = {};
-  Map<String, String> teacherMap = {};
+  Map<String, Subject> subjectsMap = {};
+  Map<String, Map<String, dynamic>> teachersMap = {}; // teacherId -> teacherData
 
   @override
   void initState() {
     super.initState();
-    fetchScheduleData();
+    fetchData();
   }
 
-  Future<void> fetchScheduleData() async {
+  /// Вспомогательная функция для получения текущего дня недели на русском языке
+  String getCurrentDayOfWeek() {
+    switch (DateTime.now().weekday) {
+      case DateTime.monday:
+        return 'Понедельник';
+      case DateTime.tuesday:
+        return 'Вторник';
+      case DateTime.wednesday:
+        return 'Среда';
+      case DateTime.thursday:
+        return 'Четверг';
+      case DateTime.friday:
+        return 'Пятница';
+      case DateTime.saturday:
+        return 'Суббота';
+      case DateTime.sunday:
+        return 'Воскресенье';
+      default:
+        return '';
+    }
+  }
+
+  /// Метод для загрузки данных расписания, предметов и учителей
+  Future<void> fetchData() async {
     try {
-      User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() {
-          errorMessage = 'Пользователь не аутентифицирован.';
-          isLoading = false;
-        });
-        return;
-      }
-
-      String userId = user.uid;
-
-      // Извлекаем роль пользователя
-      DocumentSnapshot userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .get();
-
-      if (!userDoc.exists) {
-        setState(() {
-          errorMessage = 'Данные пользователя не найдены.';
-          isLoading = false;
-        });
-        return;
-      }
-
-      Map<String, dynamic>? userData = userDoc.data() as Map<String, dynamic>?;
-
-      if (userData == null) {
-        setState(() {
-          errorMessage = 'Данные пользователя пусты.';
-          isLoading = false;
-        });
-        return;
-      }
-
-      String role = userData['role'] ?? 'unknown';
-
-      String? groupId;
-      String? teacherId;
-
-      if (role == 'student') {
-        // Для студента: найти группу, в которой содержится его UID
-        QuerySnapshot groupSnapshot = await FirebaseFirestore.instance
-            .collection('groups')
-            .where('students', arrayContains: userId)
+      if (widget.groupId != '-1') {
+        // 1. Загрузка расписания для данной группы по полю group_id
+        QuerySnapshot scheduleSnapshot = await FirebaseFirestore.instance
+            .collection('schedules')
+            .where('group_id', isEqualTo: widget.groupId)
             .get();
 
-        if (groupSnapshot.docs.isEmpty) {
+        if (scheduleSnapshot.docs.isEmpty) {
           setState(() {
-            errorMessage = 'Группа пользователя не найдена.';
+            errorMessage = 'Расписание для этой группы не найдено.';
             isLoading = false;
           });
           return;
         }
 
-        // Предполагается, что студент принадлежит только к одной группе
-        DocumentSnapshot groupDoc = groupSnapshot.docs.first;
-        Map<String, dynamic> groupData = groupDoc.data() as Map<String, dynamic>;
-        groupId = groupDoc.id;
-      } else if (role == 'teacher') {
-        // Для учителя: использовать его UID как teacherId
-        teacherId = userId;
-      } else if (role == 'admin') {
-        // Для администратора: нет необходимости в groupId или teacherId
-      } else {
-        setState(() {
-          errorMessage = 'Неизвестная роль пользователя.';
-          isLoading = false;
-          isLoading = false;
-        });
-        return;
-      }
+        DocumentSnapshot scheduleDoc = scheduleSnapshot.docs.first;
+        Schedule fetchedSchedule =
+        Schedule.fromMap(scheduleDoc.id, scheduleDoc.data() as Map<String, dynamic>);
 
-      // Загрузка предметов
-      QuerySnapshot subjectsSnapshot =
-      await FirebaseFirestore.instance.collection('subjects').get();
+        // 2. Загрузка всех предметов
+        QuerySnapshot subjectsSnapshot =
+        await FirebaseFirestore.instance.collection('subjects').get();
 
-      for (var doc in subjectsSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final subjectId = doc.id;
-        final subjectName = data['name'] as String? ?? 'Без названия';
-        subjectMap[subjectId] = subjectName;
-      }
-
-      // Загрузка учителей
-      QuerySnapshot teachersSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: 'teacher')
-          .get();
-
-      for (var doc in teachersSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final teacherId = doc.id;
-        final teacherName = data['full_name'] as String? ?? 'Без имени';
-        teacherMap[teacherId] = teacherName;
-      }
-
-      // Загрузка расписания
-      QuerySnapshot schedulesSnapshot;
-
-      if (role == 'student') {
-        schedulesSnapshot = await FirebaseFirestore.instance
-            .collection('schedules')
-            .where('group_id', isEqualTo: groupId)
-            .get();
-      } else if (role == 'teacher') {
-        // Firestore не поддерживает вложенные запросы, поэтому нужно загрузить все расписания и фильтровать на клиенте
-        schedulesSnapshot =
-        await FirebaseFirestore.instance.collection('schedules').get();
-      } else if (role == 'admin') {
-        schedulesSnapshot =
-        await FirebaseFirestore.instance.collection('schedules').get();
-      } else {
-        schedulesSnapshot =
-        await FirebaseFirestore.instance.collection('schedules').get();
-      }
-
-      if (schedulesSnapshot.docs.isEmpty) {
-        setState(() {
-          errorMessage = 'Расписание не найдено.';
-          isLoading = false;
-        });
-        return;
-      }
-
-      List<Schedule> fetchedSchedules = [];
-
-      for (var doc in schedulesSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-
-        Schedule scheduleData = Schedule.fromMap(doc.id, data);
-
-        if (role == 'student') {
-          fetchedSchedules.add(scheduleData);
-        } else if (role == 'teacher') {
-          // Проверяем, есть ли уроки с teacher_id == current teacherId
-          bool hasTeacher = scheduleData.scheduleDays.any((day) =>
-              day.lessons.any((lesson) => lesson.teacherId == teacherId));
-          if (hasTeacher) {
-            fetchedSchedules.add(scheduleData);
-          }
-        } else if (role == 'admin') {
-          fetchedSchedules.add(scheduleData);
+        for (var doc in subjectsSnapshot.docs) {
+          Subject subject = Subject.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+          subjectsMap[subject.id] = subject;
         }
-      }
 
-      if (fetchedSchedules.isEmpty) {
+        // 3. Загрузка всех учителей из коллекции 'users' с ролью 'teacher'
+        QuerySnapshot teachersSnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .where('role', isEqualTo: 'teacher') // Убедитесь, что поле 'role' именно 'teacher'
+            .get();
+
+        for (var doc in teachersSnapshot.docs) {
+          Map<String, dynamic> teacherData = doc.data() as Map<String, dynamic>;
+          teachersMap[doc.id] = teacherData;
+        }
+
         setState(() {
-          errorMessage = 'Расписание не найдено для вашей роли.';
+          schedule = fetchedSchedule;
           isLoading = false;
         });
-        return;
+
+        // Получаем название текущего дня недели
+        String currentDay = getCurrentDayOfWeek();
+
+        // Находим уроки для текущего дня
+        ScheduleDay? currentScheduleDay = schedule!.scheduleDays.firstWhere(
+              (day) => day.dayOfWeek == currentDay,
+          orElse: () => ScheduleDay(dayOfWeek: currentDay, lessons: []),
+        );
+
+        // Обновляем домашний виджет только если есть уроки на текущий день
+        if (currentScheduleDay.lessons.isNotEmpty) {
+          updateHomeWidgetSchedule(currentScheduleDay.lessons);
+        }
+      } else {
+        // Пользователь является учителем или админом, возможно, показывать общее расписание или другое содержимое
+        // Например, можно загрузить все расписания или показать сообщение
+        setState(() {
+          schedule = null; // Или инициализируйте как вам удобно
+          isLoading = false;
+          errorMessage = 'У вас нет привязки к определенной группе.';
+        });
       }
-
-      // Для упрощения, используем первое расписание
-      // Можно адаптировать для нескольких расписаний, если требуется
-      Schedule fetchedSchedule = fetchedSchedules.first;
-
-      setState(() {
-        schedule = fetchedSchedule;
-        isLoading = false;
-      });
-
-      await updateHomeWidgetSchedule();
     } catch (e) {
-      print("Error fetching schedule data: $e");
-      if (!mounted) return;
-
+      print("Error fetching data: $e");
       setState(() {
         errorMessage = 'Ошибка при загрузке данных: $e';
         isLoading = false;
@@ -205,169 +132,49 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> updateHomeWidgetSchedule() async {
-    if (schedule == null) return;
+  /// Функция для обновления домашнего виджета с расписанием
+  Future<void> updateHomeWidgetSchedule(List<LessonEntry> lessons) async {
+    // Формируем строку из данных о расписании
+    final lessonStrings = lessons.map((l) {
+      return "${l.startTime}-${l.endTime} ${subjectsMap[l.subjectId]?.name ?? 'Без названия'} ${l.room}";
+    }).join(";");
 
-    // Формируем строку расписания для Home Widget
-    // Например, только уроки на текущий день
-    DateTime now = DateTime.now();
-    String today = DateFormat('EEEE', 'ru_RU').format(now); // Получаем день недели на русском
-
-    // Firestore может хранить дни недели на русском, поэтому сравниваем в нижнем регистре
-    ScheduleDay? todaySchedule = schedule!.scheduleDays.firstWhere(
-            (day) => day.dayOfWeek.toLowerCase() ==
-            today.toLowerCase(), // Сравнение на основе перевода дня недели
-        orElse: () => ScheduleDay(dayOfWeek: today, lessons: []));
-
-    final lessonStrings = todaySchedule.lessons.map((lesson) {
-      String subjectName = subjectMap[lesson.subjectId] ?? 'Без названия';
-      String teacherName = teacherMap[lesson.teacherId] ?? 'Неизвестный учитель';
-      return "${lesson.startTime}-${lesson.endTime} $subjectName($teacherName) ${lesson.room}";
-
-      // return "${lesson.startTime}-${lesson.endTime} $subjectName ($teacherName)  аудитории ${lesson.room}в";
-    }).join(";\n");
-
-    await HomeWidget.saveWidgetData<String>('widgetText', lessonStrings);
-    await HomeWidget.updateWidget(
-      name: 'AppWidgetProvider',
-      iOSName: 'HomeWidgetExtension',
-    );
+    try {
+      // Сохраняем данные в HomeWidget
+      await HomeWidget.saveWidgetData<String>('widgetText', lessonStrings);
+      // Обновляем виджет
+      await HomeWidget.updateWidget(
+        name: 'AppWidgetProvider', // Укажите имя провайдера для Android
+        iOSName: 'HomeWidgetExtension', // Укажите имя расширения для iOS
+      );
+      print("Home widget updated successfully.");
+    } catch (e) {
+      print("Failed to update home widget: $e");
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-
-      body: _buildBody(),
-    );
+  /// Получение текущего времени
+  TimeOfDay getCurrentTime() {
+    final now = DateTime.now();
+    return TimeOfDay(hour: now.hour, minute: now.minute);
   }
 
-  Widget _buildBody() {
-    if (isLoading) {
-      return Center(child: CircularProgressIndicator());
-    }
+  /// Проверка, находится ли текущее время в пределах урока
+  bool isCurrentLesson(LessonEntry lesson) {
+    final current = getCurrentTime();
+    final lessonStart = _parseTimeOfDay(lesson.startTime);
+    final lessonEnd = _parseTimeOfDay(lesson.endTime);
 
-    if (errorMessage.isNotEmpty) {
-      return Center(child: Text(errorMessage));
-    }
+    if (lessonStart == null || lessonEnd == null) return false;
 
-    if (schedule == null) {
-      return Center(child: Text('Расписание недоступно.'));
-    }
+    final currentMinutes = current.hour * 60 + current.minute;
+    final startMinutes = lessonStart.hour * 60 + lessonStart.minute;
+    final endMinutes = lessonEnd.hour * 60 + lessonEnd.minute;
 
-    // Определяем текущий день недели
-    DateTime now = DateTime.now();
-    String today = DateFormat('EEEE', 'ru_RU').format(now); // Получаем день недели на русском
-
-    ScheduleDay? todaySchedule = schedule!.scheduleDays.firstWhere(
-            (day) => day.dayOfWeek.toLowerCase() ==
-            today.toLowerCase(), // Сравнение на основе перевода дня недели
-        orElse: () => ScheduleDay(dayOfWeek: today, lessons: []));
-
-    if (todaySchedule.lessons.isEmpty) {
-      return Center(child: Text('Сегодня нет уроков.'));
-    }
-
-    // Определяем текущий урок
-    int currentLessonIndex = todaySchedule.lessons.indexWhere((lesson) {
-      final nowTime = TimeOfDay.fromDateTime(now);
-      final lessonStart = _parseTimeOfDay(lesson.startTime);
-      final lessonEnd = _parseTimeOfDay(lesson.endTime);
-
-      if (lessonStart == null || lessonEnd == null) return false;
-
-      final nowMinutes = nowTime.hour * 60 + nowTime.minute;
-      final startMinutes = lessonStart.hour * 60 + lessonStart.minute;
-      final endMinutes = lessonEnd.hour * 60 + lessonEnd.minute;
-
-      return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
-    });
-
-    return ListView.builder(
-      itemCount: todaySchedule.lessons.length,
-      itemBuilder: (context, index) {
-        final lesson = todaySchedule.lessons[index];
-        final isCurrent = index == currentLessonIndex;
-
-        String subjectName = subjectMap[lesson.subjectId] ?? 'Без названия';
-        String teacherName = teacherMap[lesson.teacherId] ?? 'Неизвестный учитель';
-
-        return Card(
-          margin: EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
-          color: isCurrent
-              ? Theme.of(context).colorScheme.secondary.withOpacity(0.3)
-              : Theme.of(context).cardColor,
-          child: ExpansionTile(
-            title: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        subjectName,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
-                        ),
-                      ),
-                      Text(
-                        "${lesson.startTime}-${lesson.endTime}",
-                        style: TextStyle(
-                          color: Theme.of(context).textTheme.bodySmall?.color,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Flexible(
-                  flex: 2,
-                  child: Text(
-                    "Аудитория: ${lesson.room}",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: Theme.of(context).textTheme.bodyLarge?.color,
-                    ),
-                    textAlign: TextAlign.end,
-                  ),
-                ),
-              ],
-            ),
-            initiallyExpanded: isCurrent,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Учитель: $teacherName',
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Детали: ${lesson.details}',
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            ],
-          ),
-        );
-      },
-    );
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
   }
 
+  /// Парсинг строки времени в объект TimeOfDay
   TimeOfDay? _parseTimeOfDay(String timeString) {
     try {
       final parts = timeString.split(':');
@@ -379,5 +186,197 @@ class _HomePageState extends State<HomePage> {
       print("Error parsing time: $e");
       return null;
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Главная страница '),
+        centerTitle: true,
+      ),
+      body: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : errorMessage.isNotEmpty
+          ? Center(child: Text(errorMessage))
+          : widget.groupId != '-1'
+          ? Column(
+        children: [
+          // Выбор дня недели
+          Container(
+            height: 60,
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: schedule!.scheduleDays.length,
+              itemBuilder: (context, index) {
+                String day = schedule!.scheduleDays[index].dayOfWeek;
+                bool isSelected = day == selectedDay;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      selectedDay = day;
+                    });
+                  },
+                  child: GestureDetector(
+                    child: Container(
+                      margin: EdgeInsets.symmetric(horizontal: 8),
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Center(
+                        child: Text(
+                          day,
+                          style: TextStyle(
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).brightness == Brightness.dark
+                                ? Colors.white
+                                : Colors.black,
+                            fontWeight: FontWeight.bold,
+                            decoration: isSelected ? TextDecoration.underline : TextDecoration.none,
+                            decorationColor: Theme.of(context).colorScheme.primary, // Цвет подчеркивания
+                            decorationThickness: 2, // Толщина подчеркивания
+                            height: 1.5, // Увеличивает межстрочное расстояние для визуального отступа подчеркивания
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+
+                );
+              },
+            ),
+          ),
+          Divider(),
+          // Список уроков
+          Expanded(
+            child: _buildLessonsList(),
+          ),
+        ],
+      )
+          : Center(
+        child: Text(
+          'У вас нет привязки к определенной группе.',
+          style: TextStyle(fontSize: 16),
+        ),
+      ),
+    );
+  }
+
+  /// Метод для построения списка уроков
+  Widget _buildLessonsList() {
+    if (schedule == null) {
+      return Center(child: Text('Нет данных для отображения.'));
+    }
+
+    // Найти уроки для выбранного дня
+    ScheduleDay? selectedScheduleDay = schedule!.scheduleDays.firstWhere(
+          (day) => day.dayOfWeek == selectedDay,
+      orElse: () => ScheduleDay(dayOfWeek: selectedDay, lessons: []),
+    );
+
+    if (selectedScheduleDay.lessons.isEmpty) {
+      return Center(child: Text('На этот день уроков нет.'));
+    }
+
+    return ListView.builder(
+      itemCount: selectedScheduleDay.lessons.length,
+      itemBuilder: (context, index) {
+        LessonEntry lesson = selectedScheduleDay.lessons[index];
+        bool isCurrent = isCurrentLesson(lesson);
+
+        String subjectName = subjectsMap[lesson.subjectId]?.name ?? 'Без названия';
+        String teacherName = teachersMap[lesson.teacherId]?['full_name'] ?? 'Неизвестный учитель';
+
+        // Определение цвета карточки в зависимости от темы
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+
+        Color baseColor = theme.cardColor;
+        HSLColor hslColor = HSLColor.fromColor(baseColor);
+        // Регулировка светлоты: уменьшаем для светлой темы, увеличиваем для тёмной
+        // final adjustedHslColor = isDark
+        //     ? hslColor.withLightness((hslColor.lightness + 0.05).clamp(0.0, 1.0)).toColor()
+        //     : hslColor.withLightness((hslColor.lightness - 0.05).clamp(0.0, 1.0));
+        final cardColor = isDark
+            ? hslColor.withLightness((hslColor.lightness + 0.05).clamp(0.0, 1.0)).toColor()
+            :   theme.colorScheme.secondary.withOpacity(0.05);
+
+        return Card(
+          color: isCurrent
+              ? theme.colorScheme.secondary.withOpacity(0.2)
+              : cardColor,
+          margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          elevation: 0, // Убираем тень
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Row(
+              children: [
+                // Левая часть карточки
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subjectName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        lesson.details,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Правая часть карточки
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                         lesson.room,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        "${lesson.startTime} - ${lesson.endTime}",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        " $teacherName",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                        ),
+                        textAlign: TextAlign.end,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }

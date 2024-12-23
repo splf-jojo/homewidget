@@ -1,8 +1,9 @@
-// lib/pages/profile_page.dart
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProfilePage extends StatefulWidget {
   @override
@@ -11,9 +12,10 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   User? _user;
-  Map<String, dynamic>? _userData;
+  Map<String, dynamic> _userData = {};
   bool _isLoading = true;
   String _errorMessage = '';
+  File? _profileImage;
 
   @override
   void initState() {
@@ -35,12 +37,12 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(_user!.uid) // Используем UID пользователя для извлечения данных
+          .doc(_user!.uid)
           .get();
 
-      if (userDoc.exists) {
+      if (userDoc.exists && userDoc.data() != null) {
         setState(() {
-          _userData = userDoc.data();
+          _userData = userDoc.data()!;
           _isLoading = false;
         });
       } else {
@@ -57,6 +59,48 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      setState(() {
+        _profileImage = File(pickedFile.path);
+      });
+      // Здесь можно добавить код для загрузки фото в Firebase Storage
+    }
+  }
+
+  Widget _buildProfilePhoto() {
+    return GestureDetector(
+      onTap: _pickImage,
+      child: Container(
+        width: 120,
+        height: 120,
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey),
+        ),
+        child: _profileImage != null
+            ? ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.file(
+            _profileImage!,
+            fit: BoxFit.cover,
+          ),
+        )
+            : Center(
+          child: Icon(
+            Icons.add_a_photo,
+            color: Colors.grey,
+            size: 40,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProfileContent() {
     if (_isLoading) {
       return Center(child: CircularProgressIndicator());
@@ -66,85 +110,98 @@ class _ProfilePageState extends State<ProfilePage> {
       return Center(child: Text(_errorMessage));
     }
 
-    if (_userData == null) {
-      return Center(child: Text('Данные пользователя не доступны.'));
-    }
+    String role = _userData['role'] ?? 'unknown';
 
-    String role = _userData!['role'] ?? 'unknown';
-
-    switch (role) {
-      case 'student':
-        return _buildStudentProfile();
-      case 'teacher':
-        return _buildTeacherProfile();
-      case 'admin':
-        return _buildAdminProfile();
-      default:
-        return Center(child: Text('Неизвестная роль пользователя.'));
-    }
+    return Column(
+      children: [
+        SizedBox(height: 20),
+        _buildProfilePhoto(),
+        SizedBox(height: 20),
+        if (role == 'student') _buildStudentProfile(),
+        if (role == 'teacher') _buildTeacherProfile(),
+        if (role == 'admin') _buildAdminProfile(),
+      ],
+    );
   }
 
   Widget _buildStudentProfile() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Профиль Студента',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 10),
-          Text('Полное имя: ${_userData?['full_name'] ?? 'Не указано'}'),
-          Text('Email: ${_userData?['email'] ?? 'Не указано'}'),
-          Text('Телефон: ${_userData?['phone_number'] ?? 'Не указано'}'),
-          Text('ID группы: ${_userData?['group_id'] ?? 'Не указано'}'),
-        ],
-      ),
+    return _buildProfileCard(
+      title: 'Профиль Студента',
+      items: [
+        {'label': 'Полное имя', 'value': _userData['full_name'] ?? 'Не указано'},
+        {'label': 'Email', 'value': _userData['email'] ?? 'Не указано'},
+        {'label': 'Телефон', 'value': _userData['phone_number'] ?? 'Не указано'},
+        {'label': 'ID группы', 'value': _userData['group_id'] ?? 'Не указано'},
+      ],
     );
   }
 
   Widget _buildTeacherProfile() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Профиль Учителя',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 10),
-          Text('Полное имя: ${_userData?['full_name'] ?? 'Не указано'}'),
-          Text('Email: ${_userData?['email'] ?? 'Не указано'}'),
-          Text('Телефон: ${_userData?['phone_number'] ?? 'Не указано'}'),
-          Text('ID предмета: ${_userData?['subject_id'] ?? 'Не указано'}'),
-        ],
-      ),
+    return _buildProfileCard(
+      title: 'Профиль Учителя',
+      items: [
+        {'label': 'Полное имя', 'value': _userData['full_name'] ?? 'Не указано'},
+        {'label': 'Email', 'value': _userData['email'] ?? 'Не указано'},
+        {'label': 'Телефон', 'value': _userData['phone_number'] ?? 'Не указано'},
+        {'label': 'ID предмета', 'value': _userData['subject_id'] ?? 'Не указано'},
+      ],
     );
   }
 
   Widget _buildAdminProfile() {
+    return _buildProfileCard(
+      title: 'Профиль Администратора',
+      items: [
+        {'label': 'Полное имя', 'value': _userData['full_name'] ?? 'Не указано'},
+        {'label': 'Email', 'value': _userData['email'] ?? 'Не указано'},
+        {'label': 'Телефон', 'value': _userData['phone_number'] ?? 'Не указано'},
+      ],
+    );
+  }
+
+  Widget _buildProfileCard({required String title, required List<Map<String, String>> items}) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Профиль Администратора',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              Divider(),
+              ...items.map((item) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      item['label']!,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(item['value']!),
+                  ],
+                ),
+              )),
+            ],
           ),
-          SizedBox(height: 10),
-          Text('Полное имя: ${_userData?['full_name'] ?? 'Не указано'}'),
-          Text('Email: ${_userData?['email'] ?? 'Не указано'}'),
-          Text('Телефон: ${_userData?['phone_number'] ?? 'Не указано'}'),
-        ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return _buildProfileContent();
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Профиль'),
+      ),
+      body: SingleChildScrollView(child: _buildProfileContent()),
+    );
   }
 }
