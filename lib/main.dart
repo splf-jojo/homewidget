@@ -13,8 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:io';
-import 'package:image_picker/image_picker.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -139,6 +138,10 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey, // Присваиваем GlobalKey
+      appBar: AppBar(
+        title: Text(_titles[_selectedIndex]),
+        centerTitle: true,
+      ),
       body: GestureDetector(
         onHorizontalDragUpdate: (details) {
           // Определяем направление свайпа

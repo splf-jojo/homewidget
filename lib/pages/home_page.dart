@@ -2,10 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 import 'package:home/models/schedule.dart';
 import 'package:home/models/subject.dart';
-import 'package:home_widget/home_widget.dart'; // Добавленный импорт
+import 'package:home_widget/home_widget.dart';
 
 class HomePage extends StatefulWidget {
   final String groupId; // Переданный groupId
@@ -58,7 +57,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> fetchData() async {
     try {
       if (widget.groupId != '-1') {
-        // 1. Загрузка расписания для данной группы по полю group_id
+        // 1. Загрузка расписания для данной группы
         QuerySnapshot scheduleSnapshot = await FirebaseFirestore.instance
             .collection('schedules')
             .where('group_id', isEqualTo: widget.groupId)
@@ -79,21 +78,18 @@ class _HomePageState extends State<HomePage> {
         // 2. Загрузка всех предметов
         QuerySnapshot subjectsSnapshot =
         await FirebaseFirestore.instance.collection('subjects').get();
-
         for (var doc in subjectsSnapshot.docs) {
           Subject subject = Subject.fromMap(doc.id, doc.data() as Map<String, dynamic>);
           subjectsMap[subject.id] = subject;
         }
 
-        // 3. Загрузка всех учителей из коллекции 'users' с ролью 'teacher'
+        // 3. Загрузка всех учителей
         QuerySnapshot teachersSnapshot = await FirebaseFirestore.instance
             .collection('users')
-            .where('role', isEqualTo: 'teacher') // Убедитесь, что поле 'role' именно 'teacher'
+            .where('role', isEqualTo: 'teacher')
             .get();
-
         for (var doc in teachersSnapshot.docs) {
-          Map<String, dynamic> teacherData = doc.data() as Map<String, dynamic>;
-          teachersMap[doc.id] = teacherData;
+          teachersMap[doc.id] = doc.data() as Map<String, dynamic>;
         }
 
         setState(() {
@@ -115,10 +111,8 @@ class _HomePageState extends State<HomePage> {
           updateHomeWidgetSchedule(currentScheduleDay.lessons);
         }
       } else {
-        // Пользователь является учителем или админом, возможно, показывать общее расписание или другое содержимое
-        // Например, можно загрузить все расписания или показать сообщение
         setState(() {
-          schedule = null; // Или инициализируйте как вам удобно
+          schedule = null;
           isLoading = false;
           errorMessage = 'У вас нет привязки к определенной группе.';
         });
@@ -135,17 +129,17 @@ class _HomePageState extends State<HomePage> {
   /// Функция для обновления домашнего виджета с расписанием
   Future<void> updateHomeWidgetSchedule(List<LessonEntry> lessons) async {
     // Формируем строку из данных о расписании
-    final lessonStrings = lessons.map((l) {
-      return "${l.startTime}-${l.endTime} ${subjectsMap[l.subjectId]?.name ?? 'Без названия'} ${l.room}";
+    final lessonStrings = lessons.map((lesson) {
+      return "${lesson.startTime}-${lesson.endTime} "
+          "${subjectsMap[lesson.subjectId]?.name ?? 'Без названия'} "
+          "${lesson.room}";
     }).join(";");
 
     try {
-      // Сохраняем данные в HomeWidget
       await HomeWidget.saveWidgetData<String>('widgetText', lessonStrings);
-      // Обновляем виджет
       await HomeWidget.updateWidget(
-        name: 'AppWidgetProvider', // Укажите имя провайдера для Android
-        iOSName: 'HomeWidgetExtension', // Укажите имя расширения для iOS
+        name: 'AppWidgetProvider', // Android
+        iOSName: 'HomeWidgetExtension', // iOS
       );
       print("Home widget updated successfully.");
     } catch (e) {
@@ -153,49 +147,9 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  /// Получение текущего времени
-  TimeOfDay getCurrentTime() {
-    final now = DateTime.now();
-    return TimeOfDay(hour: now.hour, minute: now.minute);
-  }
-
-  /// Проверка, находится ли текущее время в пределах урока
-  bool isCurrentLesson(LessonEntry lesson) {
-    final current = getCurrentTime();
-    final lessonStart = _parseTimeOfDay(lesson.startTime);
-    final lessonEnd = _parseTimeOfDay(lesson.endTime);
-
-    if (lessonStart == null || lessonEnd == null) return false;
-
-    final currentMinutes = current.hour * 60 + current.minute;
-    final startMinutes = lessonStart.hour * 60 + lessonStart.minute;
-    final endMinutes = lessonEnd.hour * 60 + lessonEnd.minute;
-
-    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-  }
-
-  /// Парсинг строки времени в объект TimeOfDay
-  TimeOfDay? _parseTimeOfDay(String timeString) {
-    try {
-      final parts = timeString.split(':');
-      if (parts.length != 2) return null;
-      final hour = int.parse(parts[0]);
-      final minute = int.parse(parts[1]);
-      return TimeOfDay(hour: hour, minute: minute);
-    } catch (e) {
-      print("Error parsing time: $e");
-      return null;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Главная страница '),
-        centerTitle: true,
-      ),
       body: isLoading
           ? Center(child: CircularProgressIndicator())
           : errorMessage.isNotEmpty
@@ -219,31 +173,30 @@ class _HomePageState extends State<HomePage> {
                       selectedDay = day;
                     });
                   },
-                  child: GestureDetector(
-                    child: Container(
-                      margin: EdgeInsets.symmetric(horizontal: 8),
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Center(
-                        child: Text(
-                          day,
-                          style: TextStyle(
-                            color: isSelected
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).brightness == Brightness.dark
-                                ? Colors.white
-                                : Colors.black,
-                            fontWeight: FontWeight.bold,
-                            decoration: isSelected ? TextDecoration.underline : TextDecoration.none,
-                            decorationColor: Theme.of(context).colorScheme.primary, // Цвет подчеркивания
-                            decorationThickness: 2, // Толщина подчеркивания
-                            height: 1.5, // Увеличивает межстрочное расстояние для визуального отступа подчеркивания
-                          ),
+                  child: Container(
+                    margin: EdgeInsets.symmetric(horizontal: 8),
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Center(
+                      child: Text(
+                        day,
+                        style: TextStyle(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black,
+                          fontWeight: FontWeight.bold,
+                          decoration: isSelected
+                              ? TextDecoration.underline
+                              : TextDecoration.none,
+                          decorationColor:
+                          Theme.of(context).colorScheme.primary,
+                          decorationThickness: 2,
+                          height: 1.5,
                         ),
                       ),
                     ),
                   ),
-
-
                 );
               },
             ),
@@ -280,33 +233,26 @@ class _HomePageState extends State<HomePage> {
       return Center(child: Text('На этот день уроков нет.'));
     }
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return ListView.builder(
       itemCount: selectedScheduleDay.lessons.length,
       itemBuilder: (context, index) {
         LessonEntry lesson = selectedScheduleDay.lessons[index];
-        bool isCurrent = isCurrentLesson(lesson);
-
         String subjectName = subjectsMap[lesson.subjectId]?.name ?? 'Без названия';
         String teacherName = teachersMap[lesson.teacherId]?['full_name'] ?? 'Неизвестный учитель';
 
-        // Определение цвета карточки в зависимости от темы
-        final theme = Theme.of(context);
-        final isDark = theme.brightness == Brightness.dark;
-
+        // Цвет карточки в зависимости от темы
         Color baseColor = theme.cardColor;
         HSLColor hslColor = HSLColor.fromColor(baseColor);
-        // Регулировка светлоты: уменьшаем для светлой темы, увеличиваем для тёмной
-        // final adjustedHslColor = isDark
-        //     ? hslColor.withLightness((hslColor.lightness + 0.05).clamp(0.0, 1.0)).toColor()
-        //     : hslColor.withLightness((hslColor.lightness - 0.05).clamp(0.0, 1.0));
+        // Немного меняем светлоту для светлой/тёмной темы
         final cardColor = isDark
             ? hslColor.withLightness((hslColor.lightness + 0.05).clamp(0.0, 1.0)).toColor()
-            :   theme.colorScheme.secondary.withOpacity(0.05);
+            : theme.colorScheme.secondary.withOpacity(0.05);
 
         return Card(
-          color: isCurrent
-              ? theme.colorScheme.secondary.withOpacity(0.2)
-              : cardColor,
+          color: cardColor,
           margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           elevation: 0, // Убираем тень
           child: Padding(
@@ -324,7 +270,7 @@ class _HomePageState extends State<HomePage> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                          color: theme.textTheme.bodyLarge?.color,
                         ),
                       ),
                       SizedBox(height: 4),
@@ -332,7 +278,7 @@ class _HomePageState extends State<HomePage> {
                         lesson.details,
                         style: TextStyle(
                           fontSize: 14,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                          color: theme.textTheme.bodyMedium?.color,
                         ),
                       ),
                     ],
@@ -345,11 +291,11 @@ class _HomePageState extends State<HomePage> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                         lesson.room,
+                        lesson.room,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                          color: theme.textTheme.bodyLarge?.color,
                         ),
                       ),
                       SizedBox(height: 4),
@@ -357,7 +303,7 @@ class _HomePageState extends State<HomePage> {
                         "${lesson.startTime} - ${lesson.endTime}",
                         style: TextStyle(
                           fontSize: 14,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                          color: theme.textTheme.bodyMedium?.color,
                         ),
                       ),
                       SizedBox(height: 4),
@@ -365,7 +311,7 @@ class _HomePageState extends State<HomePage> {
                         " $teacherName",
                         style: TextStyle(
                           fontSize: 14,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
+                          color: theme.textTheme.bodyMedium?.color,
                         ),
                         textAlign: TextAlign.end,
                       ),
