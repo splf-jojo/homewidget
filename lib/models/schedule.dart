@@ -1,4 +1,4 @@
-// lib/models/schedule.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Schedule {
   final String id;
@@ -18,57 +18,83 @@ class Schedule {
       id: id,
       groupId: map['group_id'] ?? '',
       groupName: map['group_name'] ?? '',
-      scheduleDays: (map['schedule_days'] as List<dynamic>? ?? [])
-          .map((day) => ScheduleDay.fromMap(day))
+      scheduleDays: (map['schedule_days'] as List<dynamic>)
+          .map((dayMap) => ScheduleDay.fromMap(dayMap as Map<String, dynamic>))
           .toList(),
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'group_id': groupId,
+      'group_name': groupName,
+      'schedule_days': scheduleDays.map((day) => day.toMap()).toList(),
+    };
   }
 }
 
 class ScheduleDay {
-  final String dayOfWeek;
+  // Теперь тут хранится реальная дата (DateTime)
+  final DateTime date;
   final List<LessonEntry> lessons;
 
   ScheduleDay({
-    required this.dayOfWeek,
+    required this.date,
     required this.lessons,
   });
 
   factory ScheduleDay.fromMap(Map<String, dynamic> map) {
+    final timestamp = map['date'] as Timestamp?;
+    final dateTime = timestamp?.toDate() ?? DateTime.now();
+
     return ScheduleDay(
-      dayOfWeek: map['day_of_week'] ?? '',
-      lessons: (map['lessons'] as List<dynamic>? ?? [])
-          .map((lesson) => LessonEntry.fromMap(lesson))
+      date: dateTime,
+      lessons: (map['lessons'] as List<dynamic>)
+          .map((lessonMap) => LessonEntry.fromMap(lessonMap as Map<String, dynamic>))
           .toList(),
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'date': Timestamp.fromDate(date),
+      'lessons': lessons.map((lesson) => lesson.toMap()).toList(),
+    };
   }
 }
 
 class LessonEntry {
-  final String startTime;
-  final String endTime;
   final String subjectId;
   final String teacherId;
+  final String startTime;
+  final String endTime;
   final String room;
-  final String details;
 
   LessonEntry({
-    required this.startTime,
-    required this.endTime,
     required this.subjectId,
     required this.teacherId,
+    required this.startTime,
+    required this.endTime,
     required this.room,
-    required this.details,
   });
 
   factory LessonEntry.fromMap(Map<String, dynamic> map) {
     return LessonEntry(
-      startTime: map['start_time'] ?? '',
-      endTime: map['end_time'] ?? '',
       subjectId: map['subject_id'] ?? '',
       teacherId: map['teacher_id'] ?? '',
+      startTime: map['start_time'] ?? '',
+      endTime: map['end_time'] ?? '',
       room: map['room'] ?? '',
-      details: map['details'] ?? '',
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'subject_id': subjectId,
+      'teacher_id': teacherId,
+      'start_time': startTime,
+      'end_time': endTime,
+      'room': room,
+    };
   }
 }

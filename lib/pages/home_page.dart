@@ -2,123 +2,112 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+
+// Модели
 import 'package:home/models/schedule.dart';
 import 'package:home/models/subject.dart';
-import 'package:home_widget/home_widget.dart';
+
+// Сервисы
+import 'package:home/services/schedule_service.dart';
+import 'package:home/services/home_widget_service.dart';
+import 'package:home/services/homework_service.dart';
+
+// Виджеты
+import 'package:home/widgets/day_selector.dart';
+import 'package:home/widgets/lesson_list.dart';
 
 class HomePage extends StatefulWidget {
-  final String groupId; // Переданный groupId
+  final String groupId;
 
-  HomePage({required this.groupId});
+  const HomePage({Key? key, required this.groupId}) : super(key: key);
 
   @override
-  _HomePageState createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
   Schedule? schedule;
   bool isLoading = true;
   String errorMessage = '';
-  String selectedDay = 'Понедельник'; // По умолчанию первый день
 
-  // Карты для соответствий
+  /// Выбранная дата
+  DateTime? selectedDate;
+
+  // Словари с предметами и учителями
   Map<String, Subject> subjectsMap = {};
-  Map<String, Map<String, dynamic>> teachersMap = {}; // teacherId -> teacherData
+  Map<String, Map<String, dynamic>> teachersMap = {};
 
   @override
   void initState() {
     super.initState();
-    fetchData();
+    _loadData();
   }
 
-  /// Вспомогательная функция для получения текущего дня недели на русском языке
-  String getCurrentDayOfWeek() {
-    switch (DateTime.now().weekday) {
-      case DateTime.monday:
-        return 'Понедельник';
-      case DateTime.tuesday:
-        return 'Вторник';
-      case DateTime.wednesday:
-        return 'Среда';
-      case DateTime.thursday:
-        return 'Четверг';
-      case DateTime.friday:
-        return 'Пятница';
-      case DateTime.saturday:
-        return 'Суббота';
-      case DateTime.sunday:
-        return 'Воскресенье';
-      default:
-        return '';
-    }
-  }
-
-  /// Метод для загрузки данных расписания, предметов и учителей
-  Future<void> fetchData() async {
+  /// Загружаем расписание, предметы, учителей
+  Future<void> _loadData() async {
     try {
-      if (widget.groupId != '-1') {
-        // 1. Загрузка расписания для данной группы
-        QuerySnapshot scheduleSnapshot = await FirebaseFirestore.instance
-            .collection('schedules')
-            .where('group_id', isEqualTo: widget.groupId)
-            .get();
-
-        if (scheduleSnapshot.docs.isEmpty) {
-          setState(() {
-            errorMessage = 'Расписание для этой группы не найдено.';
-            isLoading = false;
-          });
-          return;
-        }
-
-        DocumentSnapshot scheduleDoc = scheduleSnapshot.docs.first;
-        Schedule fetchedSchedule =
-        Schedule.fromMap(scheduleDoc.id, scheduleDoc.data() as Map<String, dynamic>);
-
-        // 2. Загрузка всех предметов
-        QuerySnapshot subjectsSnapshot =
-        await FirebaseFirestore.instance.collection('subjects').get();
-        for (var doc in subjectsSnapshot.docs) {
-          Subject subject = Subject.fromMap(doc.id, doc.data() as Map<String, dynamic>);
-          subjectsMap[subject.id] = subject;
-        }
-
-        // 3. Загрузка всех учителей
-        QuerySnapshot teachersSnapshot = await FirebaseFirestore.instance
-            .collection('users')
-            .where('role', isEqualTo: 'teacher')
-            .get();
-        for (var doc in teachersSnapshot.docs) {
-          teachersMap[doc.id] = doc.data() as Map<String, dynamic>;
-        }
-
+      if (widget.groupId == '-1') {
         setState(() {
-          schedule = fetchedSchedule;
+          errorMessage = 'У вас нет привязки к определённой группе.';
           isLoading = false;
         });
+        return;
+      }
 
-        // Получаем название текущего дня недели
-        String currentDay = getCurrentDayOfWeek();
+      // 1. Получаем расписание
+      final fetchedSchedule = await ScheduleService.fetchSchedule(widget.groupId);
+      if (fetchedSchedule == null) {
+        setState(() {
+          errorMessage = 'Расписание для этой группы не найдено.';
+          isLoading = false;
+        });
+        return;
+      }
 
-        // Находим уроки для текущего дня
-        ScheduleDay? currentScheduleDay = schedule!.scheduleDays.firstWhere(
-              (day) => day.dayOfWeek == currentDay,
-          orElse: () => ScheduleDay(dayOfWeek: currentDay, lessons: []),
+      // 2. Предметы
+      final fetchedSubjects = await ScheduleService.fetchSubjects();
+
+      // 3. Учителя
+      final fetchedTeachers = await ScheduleService.fetchTeachers();
+
+      // Сортируем дни по возрастанию даты
+      fetchedSchedule.scheduleDays.sort((a, b) => a.date.compareTo(b.date));
+
+      // Ищем «сегодня» или ближайший день
+      final today = DateTime.now();
+      final todayDay = fetchedSchedule.scheduleDays.firstWhere(
+            (day) =>
+        day.date.year == today.year &&
+            day.date.month == today.month &&
+            day.date.day == today.day,
+        orElse: () {
+          if (fetchedSchedule.scheduleDays.isNotEmpty) {
+            // Возвращаем первый день из списка, если сегодня нет в расписании
+            return fetchedSchedule.scheduleDays[0];
+          } else {
+            // Если расписание пустое, создаём дефолтный день с сегодняшней датой и пустыми уроками
+            return ScheduleDay(date: today, lessons: []);
+          }
+        },
+      );
+
+      setState(() {
+        schedule = fetchedSchedule;
+        subjectsMap = fetchedSubjects;
+        teachersMap = fetchedTeachers;
+        selectedDate = todayDay.date;
+        isLoading = false;
+      });
+
+      // Обновляем домашний виджет (например, для «сегодня»)
+      if (todayDay.lessons.isNotEmpty) {
+        await HomeWidgetService.updateHomeWidgetSchedule(
+          todayDay.lessons,
+          fetchedSubjects,
         );
-
-        // Обновляем домашний виджет только если есть уроки на текущий день
-        if (currentScheduleDay.lessons.isNotEmpty) {
-          updateHomeWidgetSchedule(currentScheduleDay.lessons);
-        }
-      } else {
-        setState(() {
-          schedule = null;
-          isLoading = false;
-          errorMessage = 'У вас нет привязки к определенной группе.';
-        });
       }
     } catch (e) {
-      print("Error fetching data: $e");
       setState(() {
         errorMessage = 'Ошибка при загрузке данных: $e';
         isLoading = false;
@@ -126,203 +115,65 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  /// Функция для обновления домашнего виджета с расписанием
-  Future<void> updateHomeWidgetSchedule(List<LessonEntry> lessons) async {
-    // Формируем строку из данных о расписании
-    final lessonStrings = lessons.map((lesson) {
-      return "${lesson.startTime}-${lesson.endTime} "
-          "${subjectsMap[lesson.subjectId]?.name ?? 'Без названия'} "
-          "${lesson.room}";
-    }).join(";");
-
-    try {
-      await HomeWidget.saveWidgetData<String>('widgetText', lessonStrings);
-      await HomeWidget.updateWidget(
-        name: 'AppWidgetProvider', // Android
-        iOSName: 'HomeWidgetExtension', // iOS
-      );
-      print("Home widget updated successfully.");
-    } catch (e) {
-      print("Failed to update home widget: $e");
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (errorMessage.isNotEmpty) {
+      return Scaffold(
+        body: Center(child: Text(errorMessage)),
+      );
+    }
+    if (schedule == null) {
+      return const Scaffold(
+        body: Center(child: Text('Нет данных для отображения.')),
+      );
+    }
+
     return Scaffold(
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : errorMessage.isNotEmpty
-          ? Center(child: Text(errorMessage))
-          : widget.groupId != '-1'
-          ? Column(
+      body: Column(
         children: [
-          // Выбор дня недели
-          Container(
-            height: 60,
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: schedule!.scheduleDays.length,
-              itemBuilder: (context, index) {
-                String day = schedule!.scheduleDays[index].dayOfWeek;
-                bool isSelected = day == selectedDay;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      selectedDay = day;
-                    });
-                  },
-                  child: Container(
-                    margin: EdgeInsets.symmetric(horizontal: 8),
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Center(
-                      child: Text(
-                        day,
-                        style: TextStyle(
-                          color: isSelected
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(context).brightness == Brightness.dark
-                              ? Colors.white
-                              : Colors.black,
-                          fontWeight: FontWeight.bold,
-                          decoration: isSelected
-                              ? TextDecoration.underline
-                              : TextDecoration.none,
-                          decorationColor:
-                          Theme.of(context).colorScheme.primary,
-                          decorationThickness: 2,
-                          height: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+          // Горизонтальный список дат
+          DaySelector(
+            scheduleDays: schedule!.scheduleDays,
+            selectedDate: selectedDate,
+            onDateSelected: (date) {
+              setState(() => selectedDate = date);
+            },
           ),
-          Divider(),
+          const Divider(),
           // Список уроков
           Expanded(
             child: _buildLessonsList(),
           ),
         ],
-      )
-          : Center(
-        child: Text(
-          'У вас нет привязки к определенной группе.',
-          style: TextStyle(fontSize: 16),
-        ),
       ),
     );
   }
 
-  /// Метод для построения списка уроков
   Widget _buildLessonsList() {
-    if (schedule == null) {
-      return Center(child: Text('Нет данных для отображения.'));
+    if (selectedDate == null) {
+      return const Center(child: Text('Дата не выбрана'));
     }
 
-    // Найти уроки для выбранного дня
-    ScheduleDay? selectedScheduleDay = schedule!.scheduleDays.firstWhere(
-          (day) => day.dayOfWeek == selectedDay,
-      orElse: () => ScheduleDay(dayOfWeek: selectedDay, lessons: []),
+    // Ищем расписание для выбранной даты
+    final day = schedule!.scheduleDays.firstWhere(
+          (d) =>
+      d.date.year == selectedDate!.year &&
+          d.date.month == selectedDate!.month &&
+          d.date.day == selectedDate!.day,
+      orElse: () => ScheduleDay(date: selectedDate!, lessons: []),
     );
 
-    if (selectedScheduleDay.lessons.isEmpty) {
-      return Center(child: Text('На этот день уроков нет.'));
-    }
-
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return ListView.builder(
-      itemCount: selectedScheduleDay.lessons.length,
-      itemBuilder: (context, index) {
-        LessonEntry lesson = selectedScheduleDay.lessons[index];
-        String subjectName = subjectsMap[lesson.subjectId]?.name ?? 'Без названия';
-        String teacherName = teachersMap[lesson.teacherId]?['full_name'] ?? 'Неизвестный учитель';
-
-        // Цвет карточки в зависимости от темы
-        Color baseColor = theme.cardColor;
-        HSLColor hslColor = HSLColor.fromColor(baseColor);
-        // Немного меняем светлоту для светлой/тёмной темы
-        final cardColor = isDark
-            ? hslColor.withLightness((hslColor.lightness + 0.05).clamp(0.0, 1.0)).toColor()
-            : theme.colorScheme.secondary.withOpacity(0.05);
-
-        return Card(
-          color: cardColor,
-          margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          elevation: 0, // Убираем тень
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              children: [
-                // Левая часть карточки
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        subjectName,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: theme.textTheme.bodyLarge?.color,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        lesson.details,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: theme.textTheme.bodyMedium?.color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Правая часть карточки
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        lesson.room,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: theme.textTheme.bodyLarge?.color,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        "${lesson.startTime} - ${lesson.endTime}",
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: theme.textTheme.bodyMedium?.color,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        " $teacherName",
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: theme.textTheme.bodyMedium?.color,
-                        ),
-                        textAlign: TextAlign.end,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    // Передаём groupId, чтобы внутри LessonList загрузить домашку
+    return LessonList(
+      scheduleDay: day,
+      subjectsMap: subjectsMap,
+      teachersMap: teachersMap,
+      groupId: widget.groupId,
     );
   }
 }

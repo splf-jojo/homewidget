@@ -2,20 +2,27 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
+// Если ваша модель лежит в другом месте, импортируйте её
+import 'package:home/models/schedule.dart';
+
+/// Виджет редактирования/создания расписания
 class ScheduleEditor extends StatefulWidget {
   final String? scheduleId;
 
-  ScheduleEditor({this.scheduleId});
+  const ScheduleEditor({Key? key, this.scheduleId}) : super(key: key);
 
   @override
-  _ScheduleEditorState createState() => _ScheduleEditorState();
+  State<ScheduleEditor> createState() => _ScheduleEditorState();
 }
 
 class _ScheduleEditorState extends State<ScheduleEditor> {
   final _formKey = GlobalKey<FormState>();
   String? _groupId;
   String? _groupName;
+
+  /// Список дней расписания
   List<ScheduleDay> _scheduleDays = [];
   bool _isLoading = true;
 
@@ -25,29 +32,29 @@ class _ScheduleEditorState extends State<ScheduleEditor> {
     if (widget.scheduleId != null) {
       _loadSchedule();
     } else {
-      // Инициализируем дни недели с изменяемыми списками уроков
-      _scheduleDays = List.generate(7, (index) => ScheduleDay(dayOfWeek: getDayName(index)));
+      // Если создаём новое расписание, начинаем с пустого списка.
+      _scheduleDays = [];
       setState(() {
         _isLoading = false;
       });
     }
   }
 
-  String getDayName(int index) {
-    const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
-    return days[index];
-  }
-
+  /// Загрузить расписание из Firestore (если редактируем)
   Future<void> _loadSchedule() async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('schedules').doc(widget.scheduleId).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('schedules')
+          .doc(widget.scheduleId)
+          .get();
       final data = doc.data() as Map<String, dynamic>;
+
       setState(() {
         _groupId = data['group_id'];
         _groupName = data['group_name'];
-        _scheduleDays = (data['schedule_days'] as List).map((day) {
-          return ScheduleDay.fromMap(day);
-        }).toList();
+        _scheduleDays = (data['schedule_days'] as List<dynamic>)
+            .map((day) => ScheduleDay.fromMap(day as Map<String, dynamic>))
+            .toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -60,13 +67,14 @@ class _ScheduleEditorState extends State<ScheduleEditor> {
     }
   }
 
+  /// Сохранить расписание в Firestore (создать/обновить)
   Future<void> _saveSchedule() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
     if (_groupId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Пожалуйста, выберите группу')),
+        const SnackBar(content: Text('Пожалуйста, выберите группу')),
       );
       return;
     }
@@ -79,31 +87,69 @@ class _ScheduleEditorState extends State<ScheduleEditor> {
 
     try {
       if (widget.scheduleId != null) {
-        await FirebaseFirestore.instance.collection('schedules').doc(widget.scheduleId).update(scheduleData);
+        // Редактирование (update)
+        await FirebaseFirestore.instance
+            .collection('schedules')
+            .doc(widget.scheduleId)
+            .update(scheduleData);
       } else {
-        await FirebaseFirestore.instance.collection('schedules').add(scheduleData);
+        // Новое расписание (add)
+        await FirebaseFirestore.instance
+            .collection('schedules')
+            .add(scheduleData);
       }
 
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Расписание сохранено успешно')),
+        const SnackBar(content: Text('Расписание сохранено успешно')),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Произошла ошибка при сохранении расписания: $e')),
+        SnackBar(content: Text('Ошибка при сохранении: $e')),
       );
     }
+  }
+
+  /// Добавляем новый день в список
+  void _addDay() {
+    setState(() {
+      _scheduleDays.add(
+        ScheduleDay(
+          // По умолчанию пусть дата будет "сегодня"
+          date: DateTime.now(),
+          lessons: [],
+        ),
+      );
+    });
+  }
+
+  /// Удаляем день из списка
+  void _removeDay(int index) {
+    setState(() {
+      _scheduleDays.removeAt(index);
+    });
+  }
+
+  /// Обновляем день (при изменениях внутри DayWidget)
+  void _updateDay(int index, ScheduleDay updated) {
+    setState(() {
+      _scheduleDays[index] = updated;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.scheduleId != null ? 'Редактировать Расписание' : 'Создать Расписание'),
+        title: Text(
+          widget.scheduleId != null
+              ? 'Редактировать Расписание'
+              : 'Создать Расписание',
+        ),
         centerTitle: true,
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator())
           : Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -111,64 +157,81 @@ class _ScheduleEditorState extends State<ScheduleEditor> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                widget.scheduleId == null
-                    ? FutureBuilder<QuerySnapshot>(
-                  future: FirebaseFirestore.instance.collection('groups').get(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return CircularProgressIndicator();
-                    }
-                    final groups = snapshot.data!.docs;
-                    return DropdownButtonFormField<String>(
-                      value: _groupId,
-                      items: groups.map((group) {
-                        final data = group.data() as Map<String, dynamic>;
-                        return DropdownMenuItem(
-                          value: group.id,
-                          child: Text(data['name'] ?? 'Без названия'),
-                        );
-                      }).toList(),
-                      onChanged: (value) async {
-                        setState(() {
-                          _groupId = value;
-                          _groupName = groups.firstWhere((group) => group.id == value)['name'];
-                        });
-                      },
-                      decoration: InputDecoration(labelText: 'Выберите группу'),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Пожалуйста, выберите группу';
-                        }
-                        return null;
-                      },
-                    );
-                  },
-                )
-                    : TextFormField(
-                  initialValue: _groupName,
-                  decoration: InputDecoration(labelText: 'Группа'),
-                  readOnly: true,
-                ),
-                SizedBox(height: 20),
+                // Если scheduleId == null (новое расписание), предлагаем выбрать группу
+                if (widget.scheduleId == null)
+                  FutureBuilder<QuerySnapshot>(
+                    future: FirebaseFirestore.instance
+                        .collection('groups')
+                        .get(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const CircularProgressIndicator();
+                      }
+                      final groups = snapshot.data!.docs;
+                      return DropdownButtonFormField<String>(
+                        value: _groupId,
+                        items: groups.map((group) {
+                          final data =
+                          group.data() as Map<String, dynamic>;
+                          return DropdownMenuItem(
+                            value: group.id,
+                            child: Text(data['name'] ?? 'Без названия'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _groupId = value;
+                            // Подставим имя
+                            _groupName = groups
+                                .firstWhere((g) => g.id == value)['name'];
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Выберите группу',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Пожалуйста, выберите группу';
+                          }
+                          return null;
+                        },
+                      );
+                    },
+                  )
+                else
+                // Если уже редактируем существующее расписание, показываем имя группы «как есть»
+                  TextFormField(
+                    initialValue: _groupName,
+                    decoration:
+                    const InputDecoration(labelText: 'Группа'),
+                    readOnly: true,
+                  ),
+                const SizedBox(height: 20),
+                // Список дней
                 ListView.builder(
                   shrinkWrap: true,
-                  physics: NeverScrollableScrollPhysics(),
+                  physics: const NeverScrollableScrollPhysics(),
                   itemCount: _scheduleDays.length,
                   itemBuilder: (context, index) {
+                    final day = _scheduleDays[index];
                     return ScheduleDayWidget(
-                      day: _scheduleDays[index],
-                      onChanged: (updatedDay) {
-                        setState(() {
-                          _scheduleDays[index] = updatedDay;
-                        });
-                      },
+                      day: day,
+                      onChanged: (updatedDay) => _updateDay(index, updatedDay),
+                      onDelete: () => _removeDay(index),
                     );
                   },
                 ),
-                SizedBox(height: 20),
+                const SizedBox(height: 10),
+                // Кнопка "Добавить день"
+                ElevatedButton.icon(
+                  onPressed: _addDay,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Добавить день'),
+                ),
+                const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _saveSchedule,
-                  child: Text('Сохранить Расписание'),
+                  child: const Text('Сохранить Расписание'),
                 ),
               ],
             ),
@@ -179,156 +242,178 @@ class _ScheduleEditorState extends State<ScheduleEditor> {
   }
 }
 
-class ScheduleDay {
-  String dayOfWeek;
-  List<LessonEntry> lessons;
-
-  ScheduleDay({required this.dayOfWeek, List<LessonEntry>? lessons})
-      : this.lessons = lessons ?? [];
-
-  factory ScheduleDay.fromMap(Map<String, dynamic> map) {
-    return ScheduleDay(
-      dayOfWeek: map['day_of_week'],
-      lessons: (map['lessons'] as List).map((lesson) => LessonEntry.fromMap(lesson)).toList(),
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'day_of_week': dayOfWeek,
-      'lessons': lessons.map((lesson) => lesson.toMap()).toList(),
-    };
-  }
-}
-
-class LessonEntry {
-  String subjectId;
-  String teacherId;
-  String startTime;
-  String endTime;
-  String room;
-
-  LessonEntry({
-    required this.subjectId,
-    required this.teacherId,
-    required this.startTime,
-    required this.endTime,
-    required this.room,
-  });
-
-  factory LessonEntry.fromMap(Map<String, dynamic> map) {
-    return LessonEntry(
-      subjectId: map['subject_id'] ?? '',
-      teacherId: map['teacher_id'] ?? '',
-      startTime: map['start_time'] ?? '',
-      endTime: map['end_time'] ?? '',
-      room: map['room'] ?? '',
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'subject_id': subjectId,
-      'teacher_id': teacherId,
-      'start_time': startTime,
-      'end_time': endTime,
-      'room': room,
-    };
-  }
-}
-
+/// Виджет для редактирования одного дня (ScheduleDay)
 class ScheduleDayWidget extends StatefulWidget {
   final ScheduleDay day;
   final ValueChanged<ScheduleDay> onChanged;
+  final VoidCallback onDelete;
 
-  ScheduleDayWidget({required this.day, required this.onChanged});
+  const ScheduleDayWidget({
+    Key? key,
+    required this.day,
+    required this.onChanged,
+    required this.onDelete,
+  }) : super(key: key);
 
   @override
-  _ScheduleDayWidgetState createState() => _ScheduleDayWidgetState();
+  State<ScheduleDayWidget> createState() => _ScheduleDayWidgetState();
 }
 
 class _ScheduleDayWidgetState extends State<ScheduleDayWidget> {
+  late DateTime _date;
+  late List<LessonEntry> _lessons;
+
+  @override
+  void initState() {
+    super.initState();
+    // Локально сохраняем дату и уроки
+    _date = widget.day.date;
+    _lessons = widget.day.lessons;
+  }
+
+  /// Открывает диалог выбора даты (DatePicker)
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final newDate = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 2),
+    );
+    if (newDate != null) {
+      setState(() {
+        _date = newDate;
+      });
+      _notifyChange();
+    }
+  }
+
   void _addLesson() {
     setState(() {
-      widget.day.lessons.add(LessonEntry(
-        subjectId: '',
-        teacherId: '',
-        startTime: '',
-        endTime: '',
-        room: '',
-      ));
-      widget.onChanged(widget.day);
+      _lessons.add(
+        LessonEntry(
+          subjectId: '',
+          teacherId: '',
+          startTime: '',
+          endTime: '',
+          room: '',
+        ),
+      );
     });
+    _notifyChange();
   }
 
   void _removeLesson(int index) {
     setState(() {
-      widget.day.lessons.removeAt(index);
-      widget.onChanged(widget.day);
+      _lessons.removeAt(index);
     });
+    _notifyChange();
   }
 
-  void _updateLesson(int index, LessonEntry lesson) {
+  void _updateLesson(int index, LessonEntry updatedLesson) {
     setState(() {
-      widget.day.lessons[index] = lesson;
-      widget.onChanged(widget.day);
+      _lessons[index] = updatedLesson;
     });
+    _notifyChange();
+  }
+
+  /// Сообщаем «родителю», что данные в этом дне обновились
+  void _notifyChange() {
+    widget.onChanged(
+      ScheduleDay(
+        date: _date,
+        lessons: _lessons,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Форматируем дату в человекочитаемый вид, например: "5 янв 2025"
+    final formattedDate = DateFormat('d MMM yyyy', 'ru').format(_date);
+
     return Card(
-      margin: EdgeInsets.symmetric(vertical: 8.0),
+      margin: const EdgeInsets.symmetric(vertical: 8.0),
       child: ExpansionTile(
-        title: Text(widget.day.dayOfWeek),
+        // Заголовок = выбранная дата
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(formattedDate),
+            // Кнопка «Выбрать дату»
+            IconButton(
+              icon: const Icon(Icons.calendar_today),
+              onPressed: _pickDate,
+              tooltip: 'Выбрать дату',
+            ),
+          ],
+        ),
         children: [
           ListView.builder(
             shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
-            itemCount: widget.day.lessons.length,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _lessons.length,
             itemBuilder: (context, index) {
-              final lesson = widget.day.lessons[index];
+              final lesson = _lessons[index];
               return LessonEntryWidget(
                 lesson: lesson,
-                onChanged: (updatedLesson) => _updateLesson(index, updatedLesson),
+                onChanged: (updated) => _updateLesson(index, updated),
                 onDelete: () => _removeLesson(index),
               );
             },
           ),
           TextButton.icon(
             onPressed: _addLesson,
-            icon: Icon(Icons.add),
-            label: Text('Добавить Урок'),
+            icon: const Icon(Icons.add),
+            label: const Text('Добавить урок'),
           ),
+          // Кнопка "Удалить день"
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: widget.onDelete,
+              icon: const Icon(Icons.delete, color: Colors.red),
+              label: const Text(
+                'Удалить день',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          )
         ],
       ),
     );
   }
 }
 
+/// Виджет редактирования одного урока (LessonEntry)
 class LessonEntryWidget extends StatefulWidget {
   final LessonEntry lesson;
   final ValueChanged<LessonEntry> onChanged;
   final VoidCallback onDelete;
 
-  LessonEntryWidget({required this.lesson, required this.onChanged, required this.onDelete});
+  const LessonEntryWidget({
+    Key? key,
+    required this.lesson,
+    required this.onChanged,
+    required this.onDelete,
+  }) : super(key: key);
 
   @override
-  _LessonEntryWidgetState createState() => _LessonEntryWidgetState();
+  State<LessonEntryWidget> createState() => _LessonEntryWidgetState();
 }
 
 class _LessonEntryWidgetState extends State<LessonEntryWidget> {
-  String? _selectedSubjectId;
-  String? _selectedTeacherId;
-  String _startTime = '';
-  String _endTime = '';
-  String _room = '';
+  late String _subjectId;
+  late String _teacherId;
+  late String _startTime;
+  late String _endTime;
+  late String _room;
 
   @override
   void initState() {
     super.initState();
-    _selectedSubjectId = widget.lesson.subjectId.isNotEmpty ? widget.lesson.subjectId : null;
-    _selectedTeacherId = widget.lesson.teacherId.isNotEmpty ? widget.lesson.teacherId : null;
+    _subjectId = widget.lesson.subjectId;
+    _teacherId = widget.lesson.teacherId;
     _startTime = widget.lesson.startTime;
     _endTime = widget.lesson.endTime;
     _room = widget.lesson.room;
@@ -336,14 +421,14 @@ class _LessonEntryWidgetState extends State<LessonEntryWidget> {
 
   void _onSubjectChanged(String? value) {
     setState(() {
-      _selectedSubjectId = value;
+      _subjectId = value ?? '';
     });
     _notifyChange();
   }
 
   void _onTeacherChanged(String? value) {
     setState(() {
-      _selectedTeacherId = value;
+      _teacherId = value ?? '';
     });
     _notifyChange();
   }
@@ -369,32 +454,37 @@ class _LessonEntryWidgetState extends State<LessonEntryWidget> {
     _notifyChange();
   }
 
+  /// Уведомляем родителя, что урок поменялся
   void _notifyChange() {
-    widget.onChanged(LessonEntry(
-      subjectId: _selectedSubjectId ?? '',
-      teacherId: _selectedTeacherId ?? '',
-      startTime: _startTime,
-      endTime: _endTime,
-      room: _room,
-    ));
+    widget.onChanged(
+      LessonEntry(
+        subjectId: _subjectId,
+        teacherId: _teacherId,
+        startTime: _startTime,
+        endTime: _endTime,
+        room: _room,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
+      margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Column(
           children: [
             // Dropdown для предмета
             StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('subjects').snapshots(),
+              stream: FirebaseFirestore.instance
+                  .collection('subjects')
+                  .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return CircularProgressIndicator();
+                if (!snapshot.hasData) return const CircularProgressIndicator();
                 final subjects = snapshot.data!.docs;
                 return DropdownButtonFormField<String>(
-                  value: _selectedSubjectId?.isNotEmpty == true ? _selectedSubjectId : null,
+                  value: _subjectId.isNotEmpty ? _subjectId : null,
                   items: subjects.map((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     return DropdownMenuItem<String>(
@@ -403,7 +493,7 @@ class _LessonEntryWidgetState extends State<LessonEntryWidget> {
                     );
                   }).toList(),
                   onChanged: _onSubjectChanged,
-                  decoration: InputDecoration(labelText: 'Предмет'),
+                  decoration: const InputDecoration(labelText: 'Предмет'),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Пожалуйста, выберите предмет';
@@ -413,15 +503,18 @@ class _LessonEntryWidgetState extends State<LessonEntryWidget> {
                 );
               },
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             // Dropdown для учителя
             StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'teacher').snapshots(),
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .where('role', isEqualTo: 'teacher')
+                  .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return CircularProgressIndicator();
+                if (!snapshot.hasData) return const CircularProgressIndicator();
                 final teachers = snapshot.data!.docs;
                 return DropdownButtonFormField<String>(
-                  value: _selectedTeacherId?.isNotEmpty == true ? _selectedTeacherId : null,
+                  value: _teacherId.isNotEmpty ? _teacherId : null,
                   items: teachers.map((doc) {
                     final data = doc.data() as Map<String, dynamic>;
                     return DropdownMenuItem<String>(
@@ -430,7 +523,7 @@ class _LessonEntryWidgetState extends State<LessonEntryWidget> {
                     );
                   }).toList(),
                   onChanged: _onTeacherChanged,
-                  decoration: InputDecoration(labelText: 'Учитель'),
+                  decoration: const InputDecoration(labelText: 'Учитель'),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Пожалуйста, выберите учителя';
@@ -440,31 +533,35 @@ class _LessonEntryWidgetState extends State<LessonEntryWidget> {
                 );
               },
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             // Поле для времени начала и конца
             Row(
               children: [
                 Expanded(
                   child: TextFormField(
                     initialValue: _startTime,
-                    decoration: InputDecoration(labelText: 'Начало (например, 08:00)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Начало (например, 08:00)',
+                    ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Пожалуйста, введите время начала';
+                        return 'Введите время начала';
                       }
                       return null;
                     },
                     onChanged: _onStartTimeChanged,
                   ),
                 ),
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
                 Expanded(
                   child: TextFormField(
                     initialValue: _endTime,
-                    decoration: InputDecoration(labelText: 'Конец (например, 09:30)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Конец (например, 09:30)',
+                    ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Пожалуйста, введите время конца';
+                        return 'Введите время окончания';
                       }
                       return null;
                     },
@@ -473,14 +570,14 @@ class _LessonEntryWidgetState extends State<LessonEntryWidget> {
                 ),
               ],
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             // Поле для аудитории
             TextFormField(
               initialValue: _room,
-              decoration: InputDecoration(labelText: 'Аудитория'),
+              decoration: const InputDecoration(labelText: 'Аудитория'),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'Пожалуйста, введите номер аудитории';
+                  return 'Введите номер аудитории';
                 }
                 return null;
               },
@@ -489,7 +586,7 @@ class _LessonEntryWidgetState extends State<LessonEntryWidget> {
             Align(
               alignment: Alignment.centerRight,
               child: IconButton(
-                icon: Icon(Icons.delete, color: Colors.red),
+                icon: const Icon(Icons.delete, color: Colors.red),
                 onPressed: widget.onDelete,
               ),
             ),
