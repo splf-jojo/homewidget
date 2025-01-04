@@ -20,4 +20,14 @@ class Lesson {
 
     return now.isAfter(todayStart) && now.isBefore(todayEnd);
   }
+
+  bool isLessonEnding() {
+    final now = DateTime.now();
+    final formatter = DateFormat("HH:mm");
+    final end = formatter.parse(endTime);
+
+    final todayEnd = DateTime(now.year, now.month, now.day, end.hour, end.minute);
+
+    return now.hour == todayEnd.hour && now.minute == todayEnd.minute && now.second == 0;
+  }
 }
