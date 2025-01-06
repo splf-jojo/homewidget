@@ -42,8 +42,8 @@ class _MainPageState extends State<MainPage> {
     // Базовые страницы
     _pages = [
       HomePage(groupId: widget.groupId),
-       NewsPage(),
-       CollegePage(),
+      NewsPage(),
+      CollegePage(groupId: widget.groupId),
     ];
     _titles = [
       'Главная',
