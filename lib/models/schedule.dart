@@ -31,10 +31,14 @@ class Schedule {
       'schedule_days': scheduleDays.map((day) => day.toMap()).toList(),
     };
   }
+
+  @override
+  String toString() {
+    return 'Schedule{id: $id, groupId: $groupId, groupName: $groupName, scheduleDays: $scheduleDays}';
+  }
 }
 
 class ScheduleDay {
-  // Теперь тут хранится реальная дата (DateTime)
   final DateTime date;
   final List<LessonEntry> lessons;
 
@@ -60,6 +64,11 @@ class ScheduleDay {
       'date': Timestamp.fromDate(date),
       'lessons': lessons.map((lesson) => lesson.toMap()).toList(),
     };
+  }
+
+  @override
+  String toString() {
+    return 'ScheduleDay{date: $date, lessons: $lessons}';
   }
 }
 
@@ -87,7 +96,10 @@ class LessonEntry {
       room: map['room'] ?? '',
     );
   }
-
+  @override
+  String toString() {
+    return 'vladcushpan{subjectId: $subjectId, teacherId: $teacherId, startTime: $startTime, endTime: $endTime, room: $room}';
+  }
   Map<String, dynamic> toMap() {
     return {
       'subject_id': subjectId,
@@ -97,4 +109,6 @@ class LessonEntry {
       'room': room,
     };
   }
+
+
 }

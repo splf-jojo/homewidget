@@ -54,7 +54,6 @@ class _HomePageState extends State<HomePage> {
         });
         return;
       }
-
       // 1. Получаем расписание
       final fetchedSchedule = await ScheduleService.fetchSchedule(widget.groupId);
       if (fetchedSchedule == null) {

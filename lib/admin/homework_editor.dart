@@ -1,9 +1,7 @@
-// lib/admin/homework_editor.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
-// Модель
 import 'package:home/models/homework.dart';
 
 class HomeworkEditor extends StatefulWidget {
@@ -75,9 +73,7 @@ class _HomeworkEditorState extends State<HomeworkEditor> {
     try {
       if (widget.homeworkId == null) {
         // Создаём новое
-        await FirebaseFirestore.instance
-            .collection('homeworks')
-            .add(hwData);
+        await FirebaseFirestore.instance.collection('homeworks').add(hwData);
       } else {
         // Обновляем существующее
         await FirebaseFirestore.instance
@@ -121,6 +117,7 @@ class _HomeworkEditorState extends State<HomeworkEditor> {
               ? 'Добавить домашнее задание'
               : 'Редактировать домашнее задание',
         ),
+        centerTitle: true,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -131,9 +128,7 @@ class _HomeworkEditorState extends State<HomeworkEditor> {
             children: [
               // Выбор группы
               StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('groups')
-                    .snapshots(),
+                stream: FirebaseFirestore.instance.collection('groups').snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const SizedBox();
@@ -156,9 +151,7 @@ class _HomeworkEditorState extends State<HomeworkEditor> {
               const SizedBox(height: 16),
               // Выбор предмета
               StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('subjects')
-                    .snapshots(),
+                stream: FirebaseFirestore.instance.collection('subjects').snapshots(),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const SizedBox();

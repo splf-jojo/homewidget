@@ -40,7 +40,7 @@ class LessonList extends StatelessWidget {
         final baseColor = theme.cardColor;
         final cardColor = isDark
             ? baseColor.withOpacity(0.9)
-            : theme.colorScheme.secondary.withOpacity(0.05);
+            : theme.colorScheme.secondary.withOpacity(0.5);
 
         return GestureDetector(
           onTap: () => _showHomeworkDialog(context, lesson.subjectId),
