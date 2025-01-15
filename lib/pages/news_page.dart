@@ -1,5 +1,6 @@
 // lib/pages/news_page.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/post_service.dart';
 import '../models/post.dart';
 
@@ -13,14 +14,22 @@ class NewsPage extends StatefulWidget {
 class _NewsPageState extends State<NewsPage> {
   bool isLoading = true;
   List<Post> posts = [];
-
-  // Пример userId — в реальном проекте возьмите из FirebaseAuth.instance.currentUser.uid
-  final String currentUserId = 'userA';
+  late String currentUserId;
 
   @override
   void initState() {
     super.initState();
+    _initializeUserId();
     _loadPosts();
+  }
+
+  void _initializeUserId() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      currentUserId = user.uid;
+    } else {
+      currentUserId = 'guest'; // Временный идентификатор для тестов
+    }
   }
 
   Future<void> _loadPosts() async {
@@ -71,34 +80,49 @@ class _NewsPageState extends State<NewsPage> {
       itemBuilder: (context, index) {
         final post = posts[index];
         final userReaction = post.userReactions[currentUserId];
-        // Например, "like" или "love"
         final likeCount = post.reactions['like'] ?? 0;
         final loveCount = post.reactions['love'] ?? 0;
 
         return Card(
-          margin: const EdgeInsets.all(8.0),
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Текст
-                Text(post.text, style: const TextStyle(fontSize: 16)),
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)), // Легкое закругление
 
-                // Картинка
-                if (post.imageUrl.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: AspectRatio(
-                      aspectRatio: 3 / 4, // ограничиваем пропорции
-                      child: Image.network(post.imageUrl, fit: BoxFit.cover),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Картинка
+              if (post.imageUrl.isNotEmpty)
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(8.0),
+                    topRight: Radius.circular(8.0),
+                  ), // Скругляем только верхние углы
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxHeight: 400, // Максимальная высота картинки
+                      minHeight: 200, // Минимальная высота картинки (если требуется)
+                    ),
+                    child: Image.network(
+                      post.imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity, // Картинка на всю ширину карточки
                     ),
                   ),
+                ),
+              // Текст под картинкой
+              if (post.text.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Text(
+                    post.text,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ),
 
-                const SizedBox(height: 8.0),
-
-                // Кнопки лайк/сердце
-                Row(
+              // Кнопки лайк/сердце
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                child: Row(
                   children: [
                     IconButton(
                       icon: Icon(
@@ -120,8 +144,8 @@ class _NewsPageState extends State<NewsPage> {
                     Text('$loveCount'),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },

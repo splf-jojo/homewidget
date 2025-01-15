@@ -34,8 +34,8 @@ class DaySelector extends StatelessWidget {
           final day = sortedDays[index];
           final date = day.date;
           // Форматируем дату. Пример: "Пн, 05 Янв"
-          final formatted = DateFormat('EEE, dd MMM', 'ru').format(date);
-
+          // final formatted = DateFormat('EEE, dd MMM', 'ru').format(date);
+          final formatted = DateFormat('EEEE', 'ru').format(date);
           // Проверяем, выбрана ли эта дата
           final bool isSelected = selectedDate != null &&
               date.year == selectedDate!.year &&
@@ -51,6 +51,7 @@ class DaySelector extends StatelessWidget {
                 child: Text(
                   formatted,
                   style: TextStyle(
+                    fontSize: 16,
                     color: isSelected
                         ? Theme.of(context).colorScheme.primary
                         : Theme.of(context).brightness == Brightness.dark
@@ -58,7 +59,7 @@ class DaySelector extends StatelessWidget {
                         : Colors.black,
                     fontWeight: FontWeight.bold,
                     decoration:
-                    isSelected ? TextDecoration.underline : TextDecoration.none,
+                    isSelected ? TextDecoration.none : TextDecoration.none,
                     decorationColor: Theme.of(context).colorScheme.primary,
                     decorationThickness: 2,
                   ),

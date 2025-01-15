@@ -69,14 +69,16 @@ class _MainPageState extends State<MainPage> {
   }
 
   List<BottomNavigationBarItem> _getBottomNavigationBarItems() {
+
     final items = <BottomNavigationBarItem>[
-      const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главная'),
-      const BottomNavigationBarItem(icon: Icon(Icons.article), label: 'Новости'),
+      const BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
+      const BottomNavigationBarItem(icon: Icon(Icons.article), label: ''),
+
     ];
 
     if (widget.role == 'admin') {
       items.add(
-        const BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Админ'),
+        const BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
       );
     }
     return items;
@@ -121,6 +123,7 @@ class _MainPageState extends State<MainPage> {
         onTap: _onItemTapped,
         selectedItemColor: Theme.of(context).colorScheme.primary,
         unselectedItemColor: Colors.grey,
+          selectedFontSize: 0,
         items: _getBottomNavigationBarItems(),
       ),
       drawer: Drawer(

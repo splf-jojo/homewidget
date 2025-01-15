@@ -37,9 +37,9 @@ class LessonList extends StatelessWidget {
             teachersMap[lesson.teacherId]?['full_name'] ?? 'Неизвестный учитель';
 
         // Лёгкое изменение цвета карточки под тему
-        final baseColor = theme.cardColor;
+        final baseColor = theme.primaryColorLight;
         final cardColor = isDark
-            ? baseColor.withOpacity(0.9)
+            ? baseColor.withOpacity(0.1)
             : theme.colorScheme.secondary.withOpacity(0.5);
 
         return GestureDetector(
